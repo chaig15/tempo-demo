@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app:*)",
+      "Bash(pnpm add:*)",
+      "Bash(npx prisma:*)",
+      "Bash(pnpm build:*)",
+      "Bash(cat:*)",
+      "Bash(pnpm prisma db push:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(pnpm dev)",
+      "Bash(curl:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}

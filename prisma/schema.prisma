@@ -1,0 +1,77 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// Transaction records for on-ramp and off-ramp
+model Transaction {
+  id              String   @id @default(cuid())
+  type            String   // "onramp" | "offramp"
+  status          String   // "pending" | "processing" | "completed" | "failed"
+  userAddress     String   // User's Tempo wallet address
+  amountUsd       Float    // Amount in USD (human readable)
+  amountToken     String   // Amount in token units (with decimals as string for precision)
+
+  // Stripe payment fields (for on-ramp)
+  stripePaymentIntentId String? @unique
+  stripePaymentStatus   String?
+
+  // Blockchain transaction fields
+  mintTxHash      String?  // Transaction hash for minting (on-ramp)
+  transferTxHash  String?  // Transaction hash for user transfer to treasury (off-ramp)
+  burnTxHash      String?  // Transaction hash for burning (off-ramp)
+
+  // Off-ramp specific
+  paymentMethodId String?  // Reference to payment method for payout
+  payoutStatus    String?  // "queued" | "processing" | "completed" | "failed"
+
+  // Metadata
+  memo            String?  // Optional memo/reference
+  errorMessage    String?  // Error details if failed
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userAddress])
+  @@index([stripePaymentIntentId])
+  @@index([status])
+}
+
+// Payment methods for off-ramp payouts (simulated)
+model PaymentMethod {
+  id          String   @id @default(cuid())
+  userAddress String
+  type        String   // "card" | "bank"
+  last4       String   // Last 4 digits for display
+  brand       String?  // Card brand (visa, mastercard, etc.)
+  isDefault   Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userAddress])
+}
+
+// Token deployment info (for tracking deployed AcmeUSD)
+model TokenDeployment {
+  id              String   @id @default(cuid())
+  name            String
+  symbol          String
+  tokenAddress    String   @unique
+  deployerAddress String
+  deployTxHash    String
+
+  // Fee AMM liquidity info
+  feeAmmPoolAddress   String?
+  liquidityTxHash     String?
+  liquidityAmount     String?
+
+  createdAt       DateTime @default(now())
+}
