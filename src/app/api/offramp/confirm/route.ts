@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { burnTokens, verifyTransferToTreasury } from '@/lib/tempo-server'
+import { createPayout } from '@/lib/stripe-server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -73,21 +74,39 @@ export async function POST(request: NextRequest) {
         `offramp:${withdrawalId}`
       )
 
+      // Create Stripe payout (shows outflow in dashboard)
+      const amountUsd = Number(transaction.amountUsd)
+      let payoutId: string | null = null
+
+      try {
+        const payoutResult = await createPayout(amountUsd, {
+          userAddress: transaction.userAddress,
+          withdrawalId,
+          burnTxHash,
+        })
+        payoutId = payoutResult.payoutId
+      } catch (payoutError) {
+        // Log but don't fail - the burn already happened
+        console.error('Stripe payout creation failed:', payoutError)
+      }
+
       // Update transaction as completed
       await prisma.transaction.update({
         where: { id: withdrawalId },
         data: {
           status: 'completed',
           burnTxHash,
-          payoutStatus: 'queued', // Simulated - in production, trigger actual payout
+          payoutStatus: payoutId ? 'paid' : 'queued',
+          payoutId,
         },
       })
 
       return NextResponse.json({
         success: true,
         burnTxHash,
-        payoutStatus: 'queued',
-        estimatedArrival: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours (simulated)
+        payoutId,
+        payoutStatus: payoutId ? 'paid' : 'queued',
+        estimatedArrival: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
     } catch (burnError) {
       await prisma.transaction.update({

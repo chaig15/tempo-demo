@@ -117,14 +117,14 @@ User                    Frontend                 Backend                  Tempo
   │                        │    (txHash)            │── Verify transfer ───>│
   │                        │                        │<── confirmed ─────────│
   │                        │                        │── Burn tokens ───────>│
-  │                        │                        │── Queue payout        │
-  │                        │<── success ────────────│   (simulated)         │
+  │                        │                        │── Create Stripe payout│
+  │                        │<── success ────────────│                       │
 ```
 
 **Key decisions:**
 - User transfers to treasury first, then we burn
 - We verify the transfer on-chain before burning
-- Payout is simulated (would be Stripe Connect or bank transfer in prod)
+- Stripe payout created to show outflow in dashboard (test mode simulates, doesn't hit real bank)
 
 ## Token Design
 

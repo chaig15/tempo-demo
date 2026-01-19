@@ -30,7 +30,8 @@ model Transaction {
 
   // Off-ramp specific
   paymentMethodId String?  // Reference to payment method for payout
-  payoutStatus    String?  // "queued" | "processing" | "completed" | "failed"
+  payoutStatus    String?  // "queued" | "processing" | "paid" | "failed"
+  payoutId        String?  // Stripe payout ID
 
   // Metadata
   memo            String?  // Optional memo/reference

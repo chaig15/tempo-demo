@@ -70,3 +70,36 @@ export async function verifyPaymentIntent(
     metadata: paymentIntent.metadata as Record<string, string>,
   }
 }
+
+/**
+ * Create a payout for off-ramp (shows outflow in Stripe dashboard)
+ * In test mode, this simulates a payout without actual bank processing
+ */
+export async function createPayout(
+  amountUsd: number,
+  metadata: {
+    userAddress: string
+    withdrawalId: string
+    burnTxHash: string
+  }
+): Promise<{ payoutId: string }> {
+  const stripe = getStripeClient()
+
+  // Convert to cents for Stripe
+  const amountCents = Math.round(amountUsd * 100)
+
+  const payout = await stripe.payouts.create({
+    amount: amountCents,
+    currency: 'usd',
+    metadata: {
+      userAddress: metadata.userAddress,
+      withdrawalId: metadata.withdrawalId,
+      burnTxHash: metadata.burnTxHash,
+      type: 'offramp',
+    },
+  })
+
+  return {
+    payoutId: payout.id,
+  }
+}
