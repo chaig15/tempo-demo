@@ -91,6 +91,20 @@ async function main() {
     console.log(`Transaction Hash: ${result.receipt.transactionHash}`)
     console.log(`Explorer: https://explore.tempo.xyz/tx/${result.receipt.transactionHash}`)
 
+    // Step 2: Grant ISSUER_ROLE to treasury
+    console.log('\n--- Step 2: Grant ISSUER_ROLE ---')
+    console.log('Granting mint/burn permission to treasury wallet...')
+
+    const grantResult = await Actions.token.grantRolesSync(walletClient, {
+      token: result.token,
+      to: account.address,
+      roles: ['issuer'],
+      feeToken: ALPHA_USD_ADDRESS,
+    })
+
+    console.log('✅ ISSUER_ROLE granted!')
+    console.log(`Transaction Hash: ${grantResult.receipt.transactionHash}`)
+
     // Save to env hint
     console.log('\n--- Next Steps ---')
     console.log('Add this to your .env file:')

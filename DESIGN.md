@@ -139,14 +139,16 @@ User                    Frontend                 Backend                  Tempo
 }
 ```
 
-### Role Separation
+### Roles
 
-| Role | Who | Can Do |
-|------|-----|--------|
-| DEFAULT_ADMIN_ROLE | Admin wallet | Grant/revoke roles |
-| ISSUER_ROLE | Treasury wallet | Mint and burn |
+| Role | Can Do |
+|------|--------|
+| DEFAULT_ADMIN_ROLE | Grant/revoke roles, token admin |
+| ISSUER_ROLE | Mint and burn tokens |
 
-The admin wallet is for role management. The treasury wallet is what the server uses for minting/burning. Separate keys, separate concerns.
+For this demo, a single treasury wallet holds both roles. The token creator automatically gets DEFAULT_ADMIN_ROLE, and we grant ISSUER_ROLE to the same wallet for minting/burning.
+
+**Production note**: In production, you'd separate these—admin key in cold storage for rare role management, treasury key hot but scoped to ISSUER_ROLE only. For a testnet demo, one key is fine.
 
 ### Fee Payment
 
