@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AcmeUSD Stablecoin On/Off-Ramp
 
-## Getting Started
+A stablecoin on-ramp and off-ramp for the Tempo network. Users can purchase AcmeUSD tokens with USD (via Stripe) and convert them back to USD.
 
-First, run the development server:
+## Prerequisites
+p
+- Node.js 18+
+- pnpm
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Set up Neon PostgreSQL (free)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Go to [neon.tech](https://neon.tech) and sign up (no credit card required)
+2. Create a new project (any name, e.g., "acme-stablecoin")
+3. Copy the connection string from the dashboard
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Configure environment variables
 
-## Learn More
+Copy the example env file and add your values:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cp .env.example .env
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Update `.env` with your Neon connection string:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+DATABASE_URL="postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require"
+```
 
-## Deploy on Vercel
+### 4. Initialize the database
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+pnpm prisma db push
+pnpm prisma generate
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 5. Run the development server
+
+```bash
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to see the app.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | Neon PostgreSQL connection string |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (test mode) |
+| `STRIPE_SECRET_KEY` | Stripe secret key (test mode) |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| `ACME_TREASURY_PRIVATE_KEY` | Treasury wallet private key for minting/burning |
+| `NEXT_PUBLIC_ACME_USD_ADDRESS` | Deployed AcmeUSD token address |
+
+## Tech Stack
+
+- **Frontend:** Next.js 16, React, Tailwind CSS
+- **Blockchain:** Wagmi + Viem with Tempo extensions
+- **Database:** Prisma + Neon (serverless PostgreSQL)
+- **Payments:** Stripe (test mode)
+- **Wallets:** Tempo passkey wallets (WebAuthn)
