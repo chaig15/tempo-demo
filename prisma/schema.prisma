@@ -45,17 +45,17 @@ model Transaction {
   @@index([status])
 }
 
-// Payment methods for off-ramp payouts (simulated)
-model PaymentMethod {
-  id          String   @id @default(cuid())
-  userAddress String
-  type        String   // "card" | "bank"
-  last4       String   // Last 4 digits for display
-  brand       String?  // Card brand (visa, mastercard, etc.)
-  isDefault   Boolean  @default(false)
+// Stripe Connected Accounts for off-ramp payouts
+model ConnectedAccount {
+  id                      String   @id @default(cuid())
+  userAddress             String   @unique  // User's Tempo wallet address
+  stripeAccountId         String   @unique  // Stripe connected account ID (acct_xxx)
+  onboardingComplete      Boolean  @default(false)
+  chargesEnabled          Boolean  @default(false)
+  payoutsEnabled          Boolean  @default(false)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   @@index([userAddress])
 }

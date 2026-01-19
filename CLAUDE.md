@@ -64,13 +64,13 @@ client.request({
 - [x] Transaction history tracking
 - [x] Testnet banner with test card hint
 - [x] Token balance display component
+- [x] Stripe Connect for off-ramp payouts (user bank account linking)
 
 ### Not Yet Done
 
 - [ ] Add Stripe API keys to `.env` (get from Stripe Dashboard)
 - [ ] Deploy AcmeUSD token to Tempo testnet (run admin script)
 - [ ] Add Fee AMM liquidity (AcmeUSD/AlphaUSD pair)
-- [ ] Grant ISSUER_ROLE to treasury wallet
 - [ ] Test full on-ramp/off-ramp flow end-to-end
 - [ ] Deploy to Vercel
 
@@ -113,6 +113,7 @@ src/
 │   ├── api/
 │   │   ├── onramp/     # initiate, confirm endpoints
 │   │   ├── offramp/    # initiate, confirm endpoints
+│   │   ├── connect/    # Stripe Connect: onboard, return, refresh, status
 │   │   └── transactions/
 │   ├── layout.tsx
 │   └── page.tsx

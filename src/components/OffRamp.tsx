@@ -1,10 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useConnection } from 'wagmi'
 import { Hooks } from 'wagmi/tempo'
 import { parseUnits, formatUnits } from 'viem'
 import { ACME_USD_ADDRESS, ACME_TREASURY_ADDRESS } from '@/lib/wagmi'
+
+type ConnectStatus = {
+  hasAccount: boolean
+  onboardingComplete: boolean
+  payoutsEnabled: boolean
+}
 
 export function OffRamp() {
   const { address } = useConnection()
@@ -12,7 +18,10 @@ export function OffRamp() {
   const [step, setStep] = useState<'input' | 'confirm' | 'processing' | 'success'>('input')
   const [withdrawalId, setWithdrawalId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<{ burnTxHash: string; amount: number } | null>(null)
+  const [result, setResult] = useState<{ burnTxHash: string; amount: number; payoutStatus: string } | null>(null)
+  const [connectStatus, setConnectStatus] = useState<ConnectStatus | null>(null)
+  const [isCheckingConnect, setIsCheckingConnect] = useState(false)
+  const [isOnboarding, setIsOnboarding] = useState(false)
 
   const { data: balance, refetch: refetchBalance } = Hooks.token.useGetBalance({
     token: ACME_USD_ADDRESS,
@@ -22,6 +31,65 @@ export function OffRamp() {
   const transfer = Hooks.token.useTransferSync()
 
   const maxAmount = balance ? parseFloat(formatUnits(balance, 6)) : 0
+
+  // Check Connect status on mount and when address changes
+  useEffect(() => {
+    if (address) {
+      checkConnectStatus()
+    }
+  }, [address])
+
+  const checkConnectStatus = async () => {
+    if (!address) return
+
+    setIsCheckingConnect(true)
+    try {
+      const response = await fetch(`/api/connect/status?userAddress=${address}`)
+      const data = await response.json()
+      setConnectStatus(data)
+    } catch (err) {
+      console.error('Failed to check connect status:', err)
+    } finally {
+      setIsCheckingConnect(false)
+    }
+  }
+
+  const handleSetupBankAccount = async () => {
+    if (!address) return
+
+    setIsOnboarding(true)
+    setError(null)
+
+    try {
+      const response = await fetch('/api/connect/onboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress: address }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start onboarding')
+      }
+
+      if (data.onboardingComplete) {
+        // Already set up
+        setConnectStatus({
+          hasAccount: true,
+          onboardingComplete: true,
+          payoutsEnabled: true,
+        })
+        setIsOnboarding(false)
+      } else {
+        // Redirect to Stripe onboarding
+        window.location.href = data.onboardingUrl
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setIsOnboarding(false)
+    }
+  }
 
   const handleInitiate = async () => {
     if (!address || !amount || !ACME_USD_ADDRESS) return
@@ -86,6 +154,7 @@ export function OffRamp() {
       setResult({
         burnTxHash: data.burnTxHash,
         amount: parseFloat(amount),
+        payoutStatus: data.payoutStatus,
       })
       setStep('success')
       refetchBalance()
@@ -134,9 +203,15 @@ export function OffRamp() {
           <p className="text-gray-600 mb-2">
             ${result.amount.toFixed(2)} AcmeUSD has been burned
           </p>
-          <p className="text-sm text-gray-500 mb-4">
-            Your USD payout has been queued (simulated)
-          </p>
+          {result.payoutStatus === 'paid' ? (
+            <p className="text-sm text-green-600 mb-4">
+              USD has been transferred to your bank account
+            </p>
+          ) : (
+            <p className="text-sm text-amber-600 mb-4">
+              Set up your bank account to receive the payout
+            </p>
+          )}
           <a
             href={`https://explore.tempo.xyz/tx/${result.burnTxHash}`}
             target="_blank"
@@ -156,6 +231,9 @@ export function OffRamp() {
     )
   }
 
+  // Show bank account setup prompt if not connected
+  const needsBankSetup = !isCheckingConnect && (!connectStatus?.hasAccount || !connectStatus?.payoutsEnabled)
+
   return (
     <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
       <h2 className="text-xl font-semibold mb-4">Sell AcmeUSD</h2>
@@ -163,6 +241,23 @@ export function OffRamp() {
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           {error}
+        </div>
+      )}
+
+      {/* Bank Account Setup Section */}
+      {needsBankSetup && step === 'input' && (
+        <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <h3 className="font-medium text-amber-800 mb-2">Link Your Bank Account</h3>
+          <p className="text-sm text-amber-700 mb-3">
+            To receive USD payouts, you need to set up your bank account first.
+          </p>
+          <button
+            onClick={handleSetupBankAccount}
+            disabled={isOnboarding}
+            className="w-full px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+          >
+            {isOnboarding ? 'Redirecting to Stripe...' : 'Set Up Bank Account'}
+          </button>
         </div>
       )}
 
@@ -196,12 +291,14 @@ export function OffRamp() {
           </div>
 
           <div className="p-4 bg-gray-50 rounded-lg">
-            <div className="text-sm text-gray-600">You will receive (simulated)</div>
+            <div className="text-sm text-gray-600">You will receive</div>
             <div className="text-xl font-bold text-gray-900">
               ${amount ? parseFloat(amount).toFixed(2) : '0.00'} USD
             </div>
             <div className="text-xs text-gray-500 mt-1">
-              Sent to your payment method (demo)
+              {connectStatus?.payoutsEnabled
+                ? 'Sent to your linked bank account'
+                : 'Link your bank account to receive payouts'}
             </div>
           </div>
 
@@ -221,7 +318,7 @@ export function OffRamp() {
             <h3 className="font-medium text-amber-800 mb-2">Confirm Withdrawal</h3>
             <p className="text-sm text-amber-700">
               You are about to send <strong>${parseFloat(amount).toFixed(2)} AcmeUSD</strong> to ACME treasury.
-              This will be burned and you'll receive USD to your payment method (simulated).
+              This will be burned and you'll receive USD to your bank account.
             </p>
           </div>
 

@@ -72,25 +72,92 @@ export async function verifyPaymentIntent(
 }
 
 /**
- * Create a payout for off-ramp (shows outflow in Stripe dashboard)
- * In test mode, this simulates a payout without actual bank processing
+ * Create a Stripe Connected Account (Express) for a user
  */
-export async function createPayout(
+export async function createConnectedAccount(
+  userAddress: string
+): Promise<{ accountId: string }> {
+  const stripe = getStripeClient()
+
+  const account = await stripe.accounts.create({
+    type: 'express',
+    metadata: {
+      userAddress,
+    },
+    capabilities: {
+      transfers: { requested: true },
+    },
+  })
+
+  return {
+    accountId: account.id,
+  }
+}
+
+/**
+ * Create an account link for onboarding
+ */
+export async function createAccountLink(
+  accountId: string,
+  returnUrl: string,
+  refreshUrl: string
+): Promise<{ url: string }> {
+  const stripe = getStripeClient()
+
+  const accountLink = await stripe.accountLinks.create({
+    account: accountId,
+    return_url: returnUrl,
+    refresh_url: refreshUrl,
+    type: 'account_onboarding',
+  })
+
+  return {
+    url: accountLink.url,
+  }
+}
+
+/**
+ * Get connected account status
+ */
+export async function getConnectedAccountStatus(
+  accountId: string
+): Promise<{
+  chargesEnabled: boolean
+  payoutsEnabled: boolean
+  detailsSubmitted: boolean
+}> {
+  const stripe = getStripeClient()
+
+  const account = await stripe.accounts.retrieve(accountId)
+
+  return {
+    chargesEnabled: account.charges_enabled ?? false,
+    payoutsEnabled: account.payouts_enabled ?? false,
+    detailsSubmitted: account.details_submitted ?? false,
+  }
+}
+
+/**
+ * Create a transfer to a connected account (for off-ramp)
+ */
+export async function createTransfer(
   amountUsd: number,
+  destinationAccountId: string,
   metadata: {
     userAddress: string
     withdrawalId: string
     burnTxHash: string
   }
-): Promise<{ payoutId: string }> {
+): Promise<{ transferId: string }> {
   const stripe = getStripeClient()
 
   // Convert to cents for Stripe
   const amountCents = Math.round(amountUsd * 100)
 
-  const payout = await stripe.payouts.create({
+  const transfer = await stripe.transfers.create({
     amount: amountCents,
     currency: 'usd',
+    destination: destinationAccountId,
     metadata: {
       userAddress: metadata.userAddress,
       withdrawalId: metadata.withdrawalId,
@@ -100,6 +167,6 @@ export async function createPayout(
   })
 
   return {
-    payoutId: payout.id,
+    transferId: transfer.id,
   }
 }

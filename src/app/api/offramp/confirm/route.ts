@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { burnTokens, verifyTransferToTreasury } from '@/lib/tempo-server'
-import { createPayout } from '@/lib/stripe-server'
+import { createTransfer } from '@/lib/stripe-server'
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,20 +74,37 @@ export async function POST(request: NextRequest) {
         `offramp:${withdrawalId}`
       )
 
-      // Create Stripe payout (shows outflow in dashboard)
-      const amountUsd = Number(transaction.amountUsd)
-      let payoutId: string | null = null
+      // Get user's connected account for payout
+      const connectedAccount = await prisma.connectedAccount.findUnique({
+        where: { userAddress: transaction.userAddress },
+      })
 
-      try {
-        const payoutResult = await createPayout(amountUsd, {
-          userAddress: transaction.userAddress,
-          withdrawalId,
-          burnTxHash,
-        })
-        payoutId = payoutResult.payoutId
-      } catch (payoutError) {
-        // Log but don't fail - the burn already happened
-        console.error('Stripe payout creation failed:', payoutError)
+      const amountUsd = Number(transaction.amountUsd)
+      let transferId: string | null = null
+      let payoutStatus = 'queued'
+
+      if (connectedAccount?.payoutsEnabled) {
+        // Create Stripe transfer to user's connected account
+        try {
+          const transferResult = await createTransfer(
+            amountUsd,
+            connectedAccount.stripeAccountId,
+            {
+              userAddress: transaction.userAddress,
+              withdrawalId,
+              burnTxHash,
+            }
+          )
+          transferId = transferResult.transferId
+          payoutStatus = 'paid'
+        } catch (transferError) {
+          // Log but don't fail - the burn already happened
+          console.error('Stripe transfer creation failed:', transferError)
+          payoutStatus = 'failed'
+        }
+      } else {
+        // No connected account - payout pending
+        payoutStatus = 'pending_account'
       }
 
       // Update transaction as completed
@@ -96,17 +113,17 @@ export async function POST(request: NextRequest) {
         data: {
           status: 'completed',
           burnTxHash,
-          payoutStatus: payoutId ? 'paid' : 'queued',
-          payoutId,
+          payoutStatus,
+          payoutId: transferId,
         },
       })
 
       return NextResponse.json({
         success: true,
         burnTxHash,
-        payoutId,
-        payoutStatus: payoutId ? 'paid' : 'queued',
-        estimatedArrival: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        transferId,
+        payoutStatus,
+        needsAccountSetup: !connectedAccount?.payoutsEnabled,
       })
     } catch (burnError) {
       await prisma.transaction.update({
