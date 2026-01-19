@@ -158,20 +158,24 @@ Users can pay Tempo network fees with AcmeUSD. This requires:
 
 We'll seed initial liquidity using AlphaUSD from the testnet faucet.
 
-## Fee Sponsorship
+## Fee Model
 
-ACME sponsors all transaction fees for users—gasless UX.
+Users pay their own transaction fees in AcmeUSD. This showcases Tempo's multi-token fee system.
 
-```typescript
-Hooks.token.useTransferSync({
-  // ... transfer params
-  feePayer: ACME_TREASURY_ADDRESS,
-})
-```
+| Operation | Who pays fee | Paid in |
+|-----------|--------------|---------|
+| Mint (on-ramp) | Treasury | AlphaUSD |
+| Transfer to treasury (off-ramp) | User | AcmeUSD |
+| Burn (off-ramp) | Treasury | AlphaUSD |
+| P2P transfers | Sender | AcmeUSD |
 
-Users see: "Transaction fee: $0.001 (sponsored by ACME)"
+**Why this model:**
+- Treasury pays for mint/burn because those are server-side operations
+- Users pay for their own transfers in AcmeUSD (they have it, fees are ~$0.001)
+- No fee sponsorship pool to manage—self-sustaining
+- Demonstrates "pay fees with your stablecoin" (the point of the Fee AMM)
 
-This demonstrates Tempo's fee sponsorship without burdening users with gas management.
+Treasury only needs AlphaUSD for its own operations (from testnet faucet).
 
 ## Safety Properties
 

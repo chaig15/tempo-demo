@@ -58,11 +58,12 @@ export function OffRamp() {
     setError(null)
 
     try {
-      // Transfer tokens to treasury
+      // Transfer tokens to treasury (user pays fee in AcmeUSD)
       const transferResult = await transfer.mutateAsync({
         token: ACME_USD_ADDRESS,
         to: ACME_TREASURY_ADDRESS,
         amount: parseUnits(amount, 6),
+        feeToken: ACME_USD_ADDRESS,
         memo: `0x${Buffer.from(withdrawalId).toString('hex').padEnd(64, '0')}` as `0x${string}`,
       })
 
@@ -230,8 +231,8 @@ export function OffRamp() {
               <span className="font-medium">${parseFloat(amount).toFixed(2)} AcmeUSD</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">Fee</span>
-              <span className="font-medium text-green-600">$0.00 (sponsored)</span>
+              <span className="text-gray-600">Network fee</span>
+              <span className="font-medium">~$0.001 AcmeUSD</span>
             </div>
             <div className="flex justify-between border-t pt-2">
               <span className="text-gray-600">You receive</span>
