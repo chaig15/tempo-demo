@@ -12,7 +12,14 @@
       "Bash(xargs kill:*)",
       "Bash(pnpm dev)",
       "Bash(curl:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(pnpm prisma generate:*)",
+      "Bash(ls:*)",
+      "Bash(pnpm next build:*)",
+      "Bash(npm install:*)",
+      "Bash(nvm ls:*)",
+      "Bash(fnm ls:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

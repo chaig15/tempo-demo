@@ -2,22 +2,31 @@
 
 ## Overview
 
-This document outlines the design for ACME's stablecoin on/off-ramp system on the Tempo network. The system enables users to:
-- **On-ramp**: Pay USD to receive AcmeUSD tokens in their Tempo wallet
-- **Off-ramp**: Convert AcmeUSD back to USD sent to their payment method
+A stablecoin on/off-ramp for the Tempo network. Users pay USD to get AcmeUSD tokens, or burn AcmeUSD to get USD back. Simple concept, but the implementation touches payments, blockchain, and the intersection of both.
+
+### Goals
+- **On-ramp**: USD → AcmeUSD tokens in user's Tempo wallet
+- **Off-ramp**: AcmeUSD → USD to user's payment method
+- **100% backing**: Every AcmeUSD in circulation is backed 1:1 by USD deposits
 
 ## Architecture
 
-### Tech Stack
-- **Frontend**: Next.js 14 (App Router) with React
-- **Backend**: Next.js API Routes
-- **Blockchain**: Tempo Testnet via `wagmi` + `viem`
-- **Payments**: Stripe (Test Mode) - no real money, full integration experience
-- **Database**: SQLite (via Prisma) for transaction tracking
-- **Authentication**: Tempo passkey wallets (WebAuthn)
-- **Deployment**: Railway (with persistent SQLite volume)
+### Stack Decisions
 
-### System Components
+| Layer | Choice | Why |
+|-------|--------|-----|
+| Framework | Next.js 16 (App Router) | Full-stack in one, API routes for backend |
+| Blockchain | wagmi + viem | Industry standard, Tempo extensions upstream |
+| Payments | Stripe (Test Mode) | Real integration experience without real money |
+| Database | Prisma 7 + Neon | Serverless Postgres, Vercel-compatible |
+| Auth | Tempo passkey wallets | WebAuthn, no seed phrases for users |
+| Deployment | Vercel | Edge-ready, works with Neon out of the box |
+
+**On Stripe Test Mode**: I considered mocking payments entirely, but using Stripe's test mode gives us the real integration—webhooks, payment intents, error handling—without touching real money. Test card `4242 4242 4242 4242` works for all success cases.
+
+**On Neon vs SQLite**: Originally considered SQLite for simplicity, but Neon's serverless driver works natively with Vercel's edge runtime. Prisma 7's driver adapter pattern makes this clean.
+
+### System Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -31,19 +40,18 @@ This document outlines the design for ACME's stablecoin on/off-ramp system on th
             ▼                    ▼                    ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Next.js Application                          │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │                    API Routes                            │    │
-│  │  POST /api/onramp/initiate   - Create payment intent     │    │
-│  │  POST /api/onramp/confirm    - Confirm & mint tokens     │    │
-│  │  POST /api/offramp/initiate  - Create withdrawal request │    │
-│  │  POST /api/offramp/confirm   - Verify burn & queue payout│    │
-│  │  GET  /api/transactions      - Transaction history       │    │
-│  └─────────────────────────────────────────────────────────┘    │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │                    API Routes                                │ │
+│  │  POST /api/onramp/initiate   - Create Stripe PaymentIntent  │ │
+│  │  POST /api/onramp/confirm    - Verify payment & mint tokens │ │
+│  │  POST /api/offramp/initiate  - Create withdrawal request    │ │
+│  │  POST /api/offramp/confirm   - Verify transfer & burn       │ │
+│  │  GET  /api/transactions      - Transaction history          │ │
+│  └─────────────────────────────────────────────────────────────┘ │
 │                              │                                   │
-│                              ▼                                   │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  │
-│  │    Database     │  │  ACME Treasury  │  │ Stripe Test     │  │
-│  │   (SQLite)      │  │    Wallet       │  │   Mode API      │  │
+│  │   Neon DB       │  │  ACME Treasury  │  │  Stripe API     │  │
+│  │   (Postgres)    │  │    Wallet       │  │  (Test Mode)    │  │
 │  └─────────────────┘  └────────┬────────┘  └─────────────────┘  │
 └────────────────────────────────┼────────────────────────────────┘
                                  │
@@ -62,89 +70,135 @@ This document outlines the design for ACME's stablecoin on/off-ramp system on th
                     └─────────────────────────┘
 ```
 
-## Core Requirements Analysis
+## Flows
 
-### 1. On-ramp: USD → AcmeUSD
+### On-ramp: USD → AcmeUSD
 
-**Flow:**
-1. User connects passkey wallet
-2. User enters USD amount to purchase
-3. System creates Stripe PaymentIntent (test mode)
-4. User enters card details via Stripe Elements (use test card `4242 4242 4242 4242`)
-5. Stripe webhook confirms payment → backend mints AcmeUSD to user's wallet
-6. User receives AcmeUSD tokens
-
-**Safety Guarantees:**
-- Mint only occurs after Stripe webhook confirms `payment_intent.succeeded`
-- Transaction is atomic: Stripe PaymentIntent ID linked to mint tx hash
-- Idempotency: same PaymentIntent ID cannot trigger multiple mints
-- Stripe handles all PCI compliance for card data
-
-### 2. Off-ramp: AcmeUSD → USD
-
-**Flow:**
-1. User initiates withdrawal request with amount
-2. System generates unique withdrawal ID
-3. User signs transaction to transfer AcmeUSD to ACME treasury
-4. Backend verifies on-chain transfer receipt
-5. ACME burns received tokens
-6. System queues USD payout to user's payment method (simulated)
-
-**Safety Guarantees:**
-- Tokens are burned only after confirmed receipt
-- Payout queued only after successful burn
-- Full audit trail with transaction hashes
-
-### 3. 100% Backing Invariant
-
-**Mechanism:**
 ```
-Total AcmeUSD Supply = Total USD Deposits - Total USD Withdrawals
-
-On-ramp:  USD received → mint AcmeUSD (supply increases)
-Off-ramp: AcmeUSD burned → USD paid out (supply decreases)
+User                    Frontend                 Backend                  Tempo
+  │                        │                        │                       │
+  │─── Enter amount ──────>│                        │                       │
+  │                        │─── POST /initiate ────>│                       │
+  │                        │                        │── Create PaymentIntent│
+  │                        │<── paymentIntentId ────│                       │
+  │                        │                        │                       │
+  │─── Enter card ────────>│                        │                       │
+  │    (Stripe Elements)   │                        │                       │
+  │                        │─── Confirm payment ───>│ (Stripe)              │
+  │                        │                        │                       │
+  │                        │─── POST /confirm ─────>│                       │
+  │                        │                        │── Verify w/ Stripe    │
+  │                        │                        │── Mint AcmeUSD ──────>│
+  │                        │                        │<── txHash ────────────│
+  │                        │<── success + txHash ───│                       │
+  │<── Show confirmation ──│                        │                       │
 ```
 
-**Verification:**
-- All mints require corresponding payment record
-- All burns require corresponding payout record
-- Supply can be audited: `totalSupply()` should equal net deposits
+**Key decisions:**
+- Mint only after Stripe confirms payment (not on PaymentIntent creation)
+- PaymentIntent ID is the idempotency key—same ID can't trigger multiple mints
+- Server holds treasury key, client never sees it
 
-### 4. Pay Fees with AcmeUSD
+### Off-ramp: AcmeUSD → USD
 
-**Requirement:** Users must be able to pay Tempo network fees using AcmeUSD.
+```
+User                    Frontend                 Backend                  Tempo
+  │                        │                        │                       │
+  │─── Enter amount ──────>│                        │                       │
+  │                        │─── POST /initiate ────>│                       │
+  │                        │<── withdrawalId + ─────│                       │
+  │                        │    treasuryAddress     │                       │
+  │                        │                        │                       │
+  │─── Sign transfer ─────>│                        │                       │
+  │    (passkey)           │───────────────────────────── Transfer ────────>│
+  │                        │<──────────────────────────── txHash ──────────│
+  │                        │                        │                       │
+  │                        │─── POST /confirm ─────>│                       │
+  │                        │    (txHash)            │── Verify transfer ───>│
+  │                        │                        │<── confirmed ─────────│
+  │                        │                        │── Burn tokens ───────>│
+  │                        │                        │── Queue payout        │
+  │                        │<── success ────────────│   (simulated)         │
+```
 
-**Implementation:**
-1. Deploy AcmeUSD as TIP-20 token (USD-denominated)
-2. Add liquidity to Fee AMM (AcmeUSD/AlphaUSD pair)
-3. Configure transactions to use AcmeUSD as `feeToken`
-
-**Initial Liquidity:**
-- ACME provides initial Fee AMM liquidity using AlphaUSD from faucet
-- First LP must burn 1,000 units (~$0.002) as anti-griefing measure
+**Key decisions:**
+- User transfers to treasury first, then we burn
+- We verify the transfer on-chain before burning
+- Payout is simulated (would be Stripe Connect or bank transfer in prod)
 
 ## Token Design
 
-### AcmeUSD Token
+### AcmeUSD (TIP-20)
 
 ```typescript
-// Token creation parameters
 {
   name: "AcmeUSD",
   symbol: "ACME",
-  currency: "USD",  // USD-denominated for fee eligibility
-  decimals: 6       // Standard stablecoin precision
+  currency: "USD",    // Makes it eligible for fee payment
+  decimals: 6         // Standard stablecoin precision
 }
 ```
 
-### Role-Based Access Control
+### Role Separation
 
-| Role | Capability | Holder |
-|------|------------|--------|
-| DEFAULT_ADMIN_ROLE | Grant/revoke roles, manage token | ACME Admin Wallet |
-| ISSUER_ROLE | Mint and burn tokens | ACME Treasury Wallet |
+| Role | Who | Can Do |
+|------|-----|--------|
+| DEFAULT_ADMIN_ROLE | Admin wallet | Grant/revoke roles |
+| ISSUER_ROLE | Treasury wallet | Mint and burn |
 
-**Security:** Treasury wallet is a server-side managed key, separate from admin.
+The admin wallet is for role management. The treasury wallet is what the server uses for minting/burning. Separate keys, separate concerns.
+
+### Fee Payment
+
+Users can pay Tempo network fees with AcmeUSD. This requires:
+1. AcmeUSD deployed as TIP-20 with `currency: "USD"`
+2. Liquidity in the Fee AMM (AcmeUSD/AlphaUSD pair)
+
+We'll seed initial liquidity using AlphaUSD from the testnet faucet.
+
+## Fee Sponsorship
+
+ACME sponsors all transaction fees for users—gasless UX.
+
+```typescript
+Hooks.token.useTransferSync({
+  // ... transfer params
+  feePayer: ACME_TREASURY_ADDRESS,
+})
+```
+
+Users see: "Transaction fee: $0.001 (sponsored by ACME)"
+
+This demonstrates Tempo's fee sponsorship without burdening users with gas management.
+
+## Safety Properties
+
+### 100% Backing Invariant
+
+```
+Total AcmeUSD Supply = Total USD Deposits - Total USD Withdrawals
+
+On-ramp:  USD in  → mint (supply ↑)
+Off-ramp: USD out → burn (supply ↓)
+```
+
+Every mint has a corresponding Stripe payment. Every burn has a corresponding payout record.
+
+### Attack Mitigations
+
+| Attack | Mitigation |
+|--------|------------|
+| Double-mint | Idempotency on Stripe PaymentIntent ID |
+| Fake payment | Server verifies with Stripe API |
+| Front-running | Mint happens server-side, not user-initiated |
+| Treasury drain | Only ISSUER_ROLE can mint/burn |
+| Replay transfer | Withdrawal ID + txHash uniqueness |
+
+### What We're Not Handling
+
+- **Fraud/chargebacks**: Stripe test mode doesn't have these. In prod, you'd hold funds for dispute period.
+- **Rate limiting**: Would add for prod to prevent abuse.
+- **KYC**: Out of scope for demo.
 
 ## Database Schema
 
@@ -153,269 +207,132 @@ model Transaction {
   id            String   @id @default(cuid())
   type          String   // "onramp" | "offramp"
   status        String   // "pending" | "completed" | "failed"
-  userAddress   String   // User's Tempo wallet address
-  amount        Decimal  // Amount in USD/AcmeUSD
-  paymentId     String?  // Mock payment reference
+  userAddress   String
+  amount        Decimal
+  paymentId     String?  // Stripe PaymentIntent ID or withdrawal ID
   txHash        String?  // Tempo transaction hash
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([userAddress])
+  @@index([paymentId])
 }
 
-model PaymentMethod {
+model TokenDeployment {
   id            String   @id @default(cuid())
-  userAddress   String
-  type          String   // "card" | "bank"
-  last4         String   // Last 4 digits for display
+  tokenAddress  String   @unique
+  name          String
+  symbol        String
+  deployTxHash  String
   createdAt     DateTime @default(now())
 }
 ```
 
-## API Design
+## Testnet Tokens
 
-### On-ramp Endpoints
+| Token | Address |
+|-------|---------|
+| pathUSD | `0x20c0000000000000000000000000000000000000` |
+| AlphaUSD | `0x20c0000000000000000000000000000000000001` |
+| BetaUSD | `0x20c0000000000000000000000000000000000002` |
+| ThetaUSD | `0x20c0000000000000000000000000000000000003` |
 
-#### POST /api/onramp/initiate
+AcmeUSD gets a new address when we deploy it. We pair it with AlphaUSD for fee payment.
+
+## Demo Considerations
+
+### No Reset Button
+
+Intentionally no reset feature:
+- On-chain state can't be reset anyway (tokens persist)
+- Historical transactions show the system working over time
+- Better for discussion: "Here's 50 test transactions we ran"
+
+### Testnet Banner
+
+UI shows:
+- "Testnet Demo" indicator
+- Test card hint: `4242 4242 4242 4242`
+- Link to Tempo Explorer for verification
+
+### Treasury Key
+
+For demo: environment variable is fine.
+For prod: HSM or MPC custody.
+
+## API Reference
+
+### POST /api/onramp/initiate
 ```typescript
 // Request
-{
-  userAddress: "0x...",
-  amountUsd: 100
-}
+{ userAddress: "0x...", amountUsd: 100 }
 
 // Response
 {
+  clientSecret: "pi_xxx_secret_xxx",  // For Stripe Elements
   paymentIntentId: "pi_xxx",
-  amountUsd: 100,
-  amountAcmeUsd: "100000000", // 100 * 10^6
-  expiresAt: "2024-..."
+  amountAcmeUsd: "100000000"  // 100 * 10^6
 }
 ```
 
-#### POST /api/onramp/confirm
+### POST /api/onramp/confirm
 ```typescript
 // Request
-{
-  paymentIntentId: "pi_xxx",
-  userAddress: "0x..."
-}
+{ paymentIntentId: "pi_xxx", userAddress: "0x..." }
 
 // Response
-{
-  success: true,
-  txHash: "0x...",
-  amountMinted: "100000000"
-}
+{ success: true, txHash: "0x...", amountMinted: "100000000" }
 ```
 
-### Off-ramp Endpoints
-
-#### POST /api/offramp/initiate
+### POST /api/offramp/initiate
 ```typescript
 // Request
-{
-  userAddress: "0x...",
-  amountAcmeUsd: "100000000",
-  paymentMethodId: "pm_xxx"
-}
+{ userAddress: "0x...", amountAcmeUsd: "100000000" }
 
 // Response
 {
   withdrawalId: "wd_xxx",
-  treasuryAddress: "0x...",  // Where to send tokens
-  amountAcmeUsd: "100000000",
+  treasuryAddress: "0x...",
   amountUsd: 100
 }
 ```
 
-#### POST /api/offramp/confirm
+### POST /api/offramp/confirm
 ```typescript
 // Request
-{
-  withdrawalId: "wd_xxx",
-  transferTxHash: "0x..."  // User's transfer to treasury
-}
+{ withdrawalId: "wd_xxx", transferTxHash: "0x..." }
 
 // Response
-{
-  success: true,
-  burnTxHash: "0x...",
-  payoutStatus: "queued",
-  estimatedArrival: "2024-..."
-}
+{ success: true, burnTxHash: "0x...", payoutStatus: "queued" }
 ```
 
-## Security Considerations
+## Tempo SDK Quick Reference
 
-### Fund Safety
-
-1. **No Pre-minting**: Tokens only minted after payment verification
-2. **Atomic Operations**: Database transaction wraps payment + mint
-3. **Idempotency Keys**: Prevent duplicate processing
-4. **Server-side Signing**: Treasury key never exposed to client
-
-### Attack Vectors Mitigated
-
-| Attack | Mitigation |
-|--------|------------|
-| Double-mint | Idempotency on paymentIntentId |
-| Fake payment | Server verifies payment status |
-| Front-running | Mint happens server-side |
-| Treasury drain | Only ISSUER_ROLE can mint/burn |
-
-## User Experience
-
-### On-ramp Flow
-1. Connect wallet (passkey biometric)
-2. Enter USD amount
-3. Enter card details (simulated form)
-4. Click "Buy AcmeUSD"
-5. See confirmation + balance update
-
-### Off-ramp Flow
-1. Enter AcmeUSD amount to withdraw
-2. Select/add payment method
-3. Review & sign transaction (passkey)
-4. See payout confirmation
-
-## Implementation Plan
-
-### Phase 1: Setup & Token Deployment
-- [ ] Initialize Next.js project with Wagmi/Viem
-- [ ] Configure Tempo testnet connection
-- [ ] Create admin scripts to deploy AcmeUSD token
-- [ ] Grant ISSUER_ROLE to treasury wallet
-- [ ] Add Fee AMM liquidity
-
-### Phase 2: Core On-ramp
-- [ ] Implement passkey wallet connection UI
-- [ ] Build on-ramp form with amount input
-- [ ] Create mock payment service
-- [ ] Implement mint endpoint
-- [ ] Add transaction tracking
-
-### Phase 3: Core Off-ramp
-- [ ] Build off-ramp form
-- [ ] Implement transfer-to-treasury flow
-- [ ] Create burn endpoint
-- [ ] Add payout queue (simulated)
-
-### Phase 4: Polish
-- [ ] Transaction history page
-- [ ] Error handling & edge cases
-- [ ] Balance display component
-- [ ] Mobile responsiveness
-
-## Testing Strategy
-
-### Unit Tests
-- Payment intent creation
-- Mint amount calculation
-- Idempotency enforcement
-
-### Integration Tests
-- Full on-ramp flow (mock payment → mint)
-- Full off-ramp flow (transfer → burn → payout)
-- Fee payment with AcmeUSD
-
-### Manual Testing
-- Testnet deployment verification
-- Passkey wallet flow
-- Explorer transaction verification
-
-## Fee Sponsorship Model
-
-ACME will sponsor all transaction fees for users, providing a gasless experience while transparently showing the sponsorship.
-
-### Implementation
-```typescript
-// All user transactions include feePayer parameter
-Hooks.token.useTransferSync({
-  // ... transfer params
-  feePayer: ACME_TREASURY_ADDRESS,  // ACME pays the fee
-})
-```
-
-### UI Display
-Users will see:
-- "Transaction fee: $0.001 (sponsored by ACME)"
-- Fee breakdown in transaction receipts
-
-This demonstrates Tempo's fee sponsorship capability while keeping UX smooth.
-
-## Tempo Testnet Tokens
-
-The Tempo testnet faucet provides these pre-deployed stablecoins:
-
-| Token | Address | Notes |
-|-------|---------|-------|
-| pathUSD | `0x20c0000000000000000000000000000000000000` | Base/path token |
-| AlphaUSD | `0x20c0000000000000000000000000000000000001` | Primary test token, used for fees |
-| BetaUSD | `0x20c0000000000000000000000000000000000002` | Alternative test token |
-| ThetaUSD | `0x20c0000000000000000000000000000000000003` | Alternative test token |
-
-**Note:** The CLAUDE.md mentions `linkingUSD` which may be an internal/older reference. The faucet uses `AlphaUSD` as the primary fee token.
-
-For AcmeUSD, we deploy a new TIP-20 token and pair it with AlphaUSD in the Fee AMM.
-
-## Deployment & Demo Considerations
-
-### Railway Deployment
-- SQLite database with persistent volume
-- Environment variables for Stripe keys and treasury private key
-- Automatic deployments from GitHub
-
-### Demo Mode Banner
-- Show "Testnet Demo" indicator in UI
-- Display test card number hint: `4242 4242 4242 4242`
-- Link to Tempo Explorer for transaction verification
-
-### No Reset (Audit Trail)
-We intentionally do NOT implement a reset feature:
-- All transactions preserved for audit/demo purposes
-- On-chain state cannot be reset anyway (minted tokens persist)
-- Historical data demonstrates system working over time
-- Better for interview discussion: "Here's 50 test transactions we ran"
-
-## Open Questions / Decisions
-
-1. **Treasury Key Management**: For production, use HSM or MPC. For demo, environment variable is acceptable.
-
-## Appendix: Tempo SDK Reference
-
-### Key Hooks Used
 ```typescript
 // Token operations
-Hooks.token.useCreateSync()     // Deploy token
-Hooks.token.useMintSync()       // Mint to address
-Hooks.token.useBurnSync()       // Burn from treasury
-Hooks.token.useTransferSync()   // Transfer tokens
-Hooks.token.useGetBalance()     // Check balance
-Hooks.token.useGrantRolesSync() // Grant issuer role
+Hooks.token.useCreateSync()      // Deploy TIP-20
+Hooks.token.useMintSync()        // Mint to address
+Hooks.token.useBurnSync()        // Burn from treasury
+Hooks.token.useTransferSync()    // Transfer tokens
+Hooks.token.useGetBalance()      // Check balance
+Hooks.token.useGrantRolesSync()  // Grant ISSUER_ROLE
 
 // Fee AMM
-Hooks.amm.useMintSync()         // Add liquidity
-Hooks.amm.usePool()             // Check pool state
+Hooks.amm.useMintSync()          // Add liquidity
+Hooks.amm.usePool()              // Check pool state
 
-// Faucet (testnet)
-Hooks.faucet.useFundSync()      // Get test AlphaUSD
+// Faucet
+Hooks.faucet.useFundSync()       // Get testnet AlphaUSD
 
-// Wallet
-webAuthn connector              // Passkey authentication
-useConnection()                 // Get connected address
+// Wallet config
+webAuthn({ keyManager: KeyManager.localStorage() })
 ```
 
-### Testnet Configuration
-```typescript
-import { tempoTest } from 'wagmi/chains'
-import { webAuthn, KeyManager } from 'wagmi/tempo'
+## What's Left
 
-const config = createConfig({
-  chains: [tempoTest],
-  connectors: [
-    webAuthn({ keyManager: KeyManager.localStorage() })
-  ],
-  transports: {
-    [tempoTest.id]: http('https://dreamy-northcutt:recursing-payne@rpc.testnet.tempo.xyz')
-  }
-})
-```
+- [ ] Get Stripe test API keys, add to `.env`
+- [ ] Deploy AcmeUSD token to testnet
+- [ ] Grant ISSUER_ROLE to treasury
+- [ ] Seed Fee AMM liquidity
+- [ ] End-to-end test
+- [ ] Deploy to Vercel
