@@ -37,3 +37,7 @@ export async function PUT(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   return handler.fetch(new Request(request.url, { method: 'DELETE', headers: request.headers }))
 }
+
+export async function POST(request: NextRequest) {
+  return handler.fetch(new Request(request.url, { method: 'POST', headers: request.headers, body: request.body, duplex: 'half' } as RequestInit))
+}
