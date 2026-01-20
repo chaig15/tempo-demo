@@ -28,6 +28,8 @@ A stablecoin on/off-ramp for the Tempo network. Users pay USD to get AcmeUSD tok
 
 **On Off-ramp Payouts**: We considered Stripe Connect for paying users to their own bank accounts. However, Connect requires platform verification even in test mode. For this demo, payouts are **simulated** - the on-chain burn is real, but the USD payout is marked as "processing" without actually hitting Stripe. The database schema includes a `ConnectedAccount` model to show what a full Connect integration would look like.
 
+**On Cross-Device Passkeys**: By default, `KeyManager.localStorage()` stores passkey credentials in browser localStorage—device-specific. For cross-device support, we use `KeyManager.http('/api/keys')` which stores credentials in our Neon database. Users can create a passkey on desktop and sign in from their phone.
+
 ### System Diagram
 
 ```
@@ -268,6 +270,14 @@ model Transaction {
   @@index([status])
 }
 
+// Key-value store for passkey credentials (cross-device support)
+model KeyStore {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // NOTE: Not used in demo - shows what Connect integration would look like
 model ConnectedAccount {
   id                 String   @id @default(cuid())
@@ -378,6 +388,20 @@ Stripe webhook handler. Listens for `payment_intent.succeeded` and mints if not 
 
 // Response
 { success: true, burnTxHash: "0x...", payoutStatus: "processing" }
+```
+
+### /api/keys/:key
+Key-value store for passkey credentials (used by `KeyManager.http()`).
+```typescript
+// GET - Retrieve key
+// Response: { value: "..." } or 404
+
+// PUT - Store key
+// Request: { value: "..." }
+// Response: { success: true }
+
+// DELETE - Remove key
+// Response: { success: true }
 ```
 
 ## Tempo SDK Quick Reference

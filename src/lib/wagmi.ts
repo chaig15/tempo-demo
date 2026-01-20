@@ -10,7 +10,8 @@ export const config = createConfig({
   chains: [tempoModerato],
   connectors: [
     webAuthn({
-      keyManager: KeyManager.localStorage(),
+      // HTTP key manager stores passkey credentials in DB for cross-device support
+      keyManager: KeyManager.http('/api/keys'),
     }),
   ],
   multiInjectedProviderDiscovery: false,

@@ -45,6 +45,14 @@ model Transaction {
   @@index([status])
 }
 
+// Key-value store for passkey credentials (cross-device support)
+model KeyStore {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // Stripe Connected Accounts for off-ramp payouts
 // NOTE: Not used in demo - payouts are simulated
 // This shows what a full Connect integration would look like
