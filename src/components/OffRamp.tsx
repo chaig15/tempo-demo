@@ -23,7 +23,8 @@ export function OffRamp() {
   // Fee buffer for transaction fees (~$0.01 to be safe, actual fee is ~$0.001)
   const FEE_BUFFER = 0.01
   const fullBalance = balance ? parseFloat(formatUnits(balance, 6)) : 0
-  const maxWithdrawable = Math.max(0, fullBalance - FEE_BUFFER)
+  // Round to 2 decimals to avoid floating point issues
+  const maxWithdrawable = Math.max(0, Math.floor((fullBalance - FEE_BUFFER) * 100) / 100)
 
   const handleInitiate = () => {
     if (!address || !amount || !ACME_USD_ADDRESS) return
@@ -34,7 +35,8 @@ export function OffRamp() {
       return
     }
 
-    if (amountNum < 1) {
+    // Only enforce minimum if they have more than $1 (otherwise they'd be stuck)
+    if (amountNum < 1 && fullBalance > 1) {
       setError('Minimum withdrawal is $1.00')
       return
     }
