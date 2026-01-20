@@ -6,13 +6,12 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { stripePromise } from '@/lib/stripe'
 
 interface OnRampFormProps {
-  clientSecret: string
   amount: number
   onSuccess: (paymentIntentId: string) => void
   onCancel: () => void
 }
 
-function OnRampForm({ clientSecret, amount, onSuccess, onCancel }: OnRampFormProps) {
+function OnRampForm({ amount, onSuccess, onCancel }: OnRampFormProps) {
   const stripe = useStripe()
   const elements = useElements()
   const [isProcessing, setIsProcessing] = useState(false)
@@ -44,9 +43,9 @@ function OnRampForm({ clientSecret, amount, onSuccess, onCancel }: OnRampFormPro
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="p-4 bg-blue-50 rounded-lg">
-        <div className="text-sm text-blue-600">You will receive</div>
-        <div className="text-2xl font-bold text-blue-900">
+      <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+        <div className="text-sm text-blue-400">You will receive</div>
+        <div className="text-2xl font-bold text-white">
           ${amount.toFixed(2)} AcmeUSD
         </div>
       </div>
@@ -54,7 +53,7 @@ function OnRampForm({ clientSecret, amount, onSuccess, onCancel }: OnRampFormPro
       <PaymentElement />
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
           {error}
         </div>
       )}
@@ -63,7 +62,7 @@ function OnRampForm({ clientSecret, amount, onSuccess, onCancel }: OnRampFormPro
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+          className="flex-1 px-4 py-3 border border-[#3a3a3a] text-gray-300 rounded-lg hover:bg-[#2a2a2a] transition-colors"
           disabled={isProcessing}
         >
           Cancel
@@ -76,10 +75,6 @@ function OnRampForm({ clientSecret, amount, onSuccess, onCancel }: OnRampFormPro
           {isProcessing ? 'Processing...' : `Pay $${amount.toFixed(2)}`}
         </button>
       </div>
-
-      <p className="text-xs text-gray-500 text-center">
-        Test card: 4242 4242 4242 4242 | Any future date | Any CVC
-      </p>
     </form>
   )
 }
@@ -157,8 +152,8 @@ export function OnRamp() {
 
   if (!address) {
     return (
-      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-        <h2 className="text-xl font-semibold mb-4">Buy AcmeUSD</h2>
+      <div className="p-6 bg-[#1a1a1a] rounded-xl border border-[#2a2a2a]">
+        <h2 className="text-xl font-semibold text-white mb-4">Buy AcmeUSD</h2>
         <p className="text-gray-500">Connect your wallet to buy AcmeUSD</p>
       </div>
     )
@@ -166,28 +161,28 @@ export function OnRamp() {
 
   if (success) {
     return (
-      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="p-6 bg-[#1a1a1a] rounded-xl border border-[#2a2a2a]">
         <div className="text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold mb-2">Purchase Complete!</h2>
-          <p className="text-gray-600 mb-4">
+          <h2 className="text-xl font-semibold text-white mb-2">Purchase Complete!</h2>
+          <p className="text-gray-400 mb-4">
             You received ${success.amount.toFixed(2)} AcmeUSD
           </p>
           <a
             href={`https://explore.tempo.xyz/tx/${success.txHash}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-500 hover:text-blue-600 text-sm"
+            className="text-blue-400 hover:text-blue-300 text-sm"
           >
             View on Explorer →
           </a>
           <button
             onClick={() => setSuccess(null)}
-            className="mt-4 w-full px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="mt-4 w-full px-4 py-2 border border-[#3a3a3a] text-gray-300 rounded-lg hover:bg-[#2a2a2a]"
           >
             Buy More
           </button>
@@ -197,11 +192,11 @@ export function OnRamp() {
   }
 
   return (
-    <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-      <h2 className="text-xl font-semibold mb-4">Buy AcmeUSD</h2>
+    <div className="p-6 bg-[#1a1a1a] rounded-xl border border-[#2a2a2a]">
+      <h2 className="text-xl font-semibold text-white mb-4">Buy AcmeUSD</h2>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
           {error}
         </div>
       )}
@@ -212,15 +207,18 @@ export function OnRamp() {
           options={{
             clientSecret,
             appearance: {
-              theme: 'stripe',
+              theme: 'night',
               variables: {
                 colorPrimary: '#3b82f6',
+                colorBackground: '#1a1a1a',
+                colorText: '#ffffff',
+                colorTextSecondary: '#888888',
+                borderRadius: '8px',
               },
             },
           }}
         >
           <OnRampForm
-            clientSecret={clientSecret}
             amount={parseFloat(amount)}
             onSuccess={handlePaymentSuccess}
             onCancel={() => setClientSecret(null)}
@@ -229,7 +227,7 @@ export function OnRamp() {
       ) : (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-400 mb-2">
               Amount (USD)
             </label>
             <div className="relative">
@@ -241,7 +239,7 @@ export function OnRamp() {
                 placeholder="0.00"
                 min="1"
                 step="0.01"
-                className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-8 pr-4 py-3 bg-[#0f0f0f] border border-[#3a3a3a] rounded-lg text-white placeholder-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -251,7 +249,7 @@ export function OnRamp() {
               <button
                 key={preset}
                 onClick={() => setAmount(preset.toString())}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-sm"
+                className="flex-1 px-3 py-2 border border-[#3a3a3a] rounded-lg hover:bg-[#2a2a2a] text-sm text-gray-300"
               >
                 ${preset}
               </button>
@@ -261,13 +259,13 @@ export function OnRamp() {
           <button
             onClick={handleInitiate}
             disabled={!amount || parseFloat(amount) <= 0 || isLoading}
-            className="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
             {isLoading ? 'Loading...' : 'Continue to Payment'}
           </button>
 
           <p className="text-xs text-gray-500 text-center">
-            1 USD = 1 AcmeUSD (no fees)
+            1 USD = 1 AcmeUSD
           </p>
         </div>
       )}

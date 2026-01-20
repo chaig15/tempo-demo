@@ -13,7 +13,7 @@ This is the ACME stablecoin on/off-ramp project for Tempo network. The goal is t
 | Resource | URL | Credentials |
 |----------|-----|-------------|
 | Docs | docs.tempo.xyz | Password: `curious-mozart` |
-| Testnet RPC | rpc.testnet.tempo.xyz | `dreamy-northcutt:recursing-payne` |
+| Testnet RPC | rpc.moderato.tempo.xyz | `dreamy-northcutt:recursing-payne` |
 | Explorer | explore.tempo.xyz | `eng:zealous-mayer` |
 
 ## Key Technical Details

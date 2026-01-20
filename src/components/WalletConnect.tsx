@@ -14,21 +14,30 @@ export function WalletConnect() {
     setMounted(true)
   }, [])
 
+  // Save address to localStorage for redirect flows (e.g., Amazon Pay)
+  useEffect(() => {
+    if (address) {
+      localStorage.setItem('tempo_user_address', address)
+    } else {
+      localStorage.removeItem('tempo_user_address')
+    }
+  }, [address])
+
   // Show loading state only when actually connecting (not during SSR/hydration)
   if (!mounted || isReconnecting || (isConnecting && !address)) {
     return (
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
+      <div className="flex items-center gap-2 px-4 py-2 bg-[#2a2a2a] rounded-lg">
         <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        <span className="text-gray-600">{mounted ? 'Connecting...' : 'Loading...'}</span>
+        <span className="text-gray-400">{mounted ? 'Connecting...' : 'Loading...'}</span>
       </div>
     )
   }
 
   if (isPending) {
     return (
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
+      <div className="flex items-center gap-2 px-4 py-2 bg-[#2a2a2a] rounded-lg">
         <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        <span className="text-gray-600">Connecting...</span>
+        <span className="text-gray-400">Connecting...</span>
       </div>
     )
   }
@@ -36,7 +45,7 @@ export function WalletConnect() {
   if (error) {
     return (
       <div className="flex flex-col gap-2">
-        <div className="text-red-500 text-sm">Error: {error.message}</div>
+        <div className="text-red-400 text-sm">Error: {error.message}</div>
         <div className="flex gap-2">
           <button
             onClick={() => connect({ connector, capabilities: { type: 'sign-up' } })}
@@ -52,15 +61,15 @@ export function WalletConnect() {
   if (address) {
     return (
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
           <div className="w-2 h-2 bg-green-500 rounded-full" />
-          <span className="text-sm font-mono">
+          <span className="text-sm font-mono text-green-400">
             {address.slice(0, 6)}...{address.slice(-4)}
           </span>
         </div>
         <button
           onClick={() => disconnect()}
-          className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+          className="px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded-lg transition-colors"
         >
           Sign Out
         </button>
@@ -72,13 +81,13 @@ export function WalletConnect() {
     <div className="flex gap-2">
       <button
         onClick={() => connect({ connector, capabilities: { type: 'sign-up' } })}
-        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium"
       >
         Sign Up
       </button>
       <button
         onClick={() => connect({ connector })}
-        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+        className="px-4 py-2 border border-[#3a3a3a] text-gray-300 rounded-lg hover:bg-[#2a2a2a] transition-colors"
       >
         Sign In
       </button>

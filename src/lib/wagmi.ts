@@ -4,7 +4,7 @@ import { webAuthn, KeyManager } from 'wagmi/tempo'
 
 // Tempo Moderato testnet RPC with authentication
 const TEMPO_RPC_URL = process.env.NEXT_PUBLIC_TEMPO_RPC_URL ||
-  'https://dreamy-northcutt:recursing-payne@rpc.testnet.tempo.xyz'
+  'https://rpc.moderato.tempo.xyz'
 
 export const config = createConfig({
   chains: [tempoModerato],

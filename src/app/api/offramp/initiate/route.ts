@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
 import { formatUnits } from 'viem'
 
 export async function POST(request: NextRequest) {
@@ -34,20 +33,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Treasury not configured' }, { status: 500 })
     }
 
-    // Create transaction record
-    const transaction = await prisma.transaction.create({
-      data: {
-        type: 'offramp',
-        status: 'pending',
-        userAddress: userAddress.toLowerCase(),
-        amountUsd,
-        amountToken: amountAcmeUsd,
-        payoutStatus: 'pending',
-      },
-    })
-
+    // Just validate and return treasury address - no DB record yet
+    // Transaction is created in confirm after user signs
     return NextResponse.json({
-      withdrawalId: transaction.id,
       treasuryAddress,
       amountAcmeUsd,
       amountUsd,

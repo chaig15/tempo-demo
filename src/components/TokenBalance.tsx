@@ -48,18 +48,18 @@ export function TokenBalance({
 
   return (
     <div className="flex items-center gap-2">
-      <div className="text-lg font-semibold">
+      <div className="text-2xl font-bold text-white">
         {isLoading ? (
-          <span className="text-gray-400">Loading...</span>
+          <span className="text-gray-500">Loading...</span>
         ) : (
           <span>${displayBalance}</span>
         )}
       </div>
-      <span className="text-sm text-gray-500">{tokenSymbol}</span>
+      <span className="text-sm text-gray-400">{tokenSymbol}</span>
       {showRefresh && (
         <button
           onClick={() => refetch()}
-          className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+          className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
           title="Refresh balance"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

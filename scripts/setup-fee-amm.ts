@@ -16,7 +16,7 @@ import { tempoModerato } from 'viem/chains'
 import { Actions, Abis } from 'viem/tempo'
 
 const TEMPO_RPC_URL = process.env.NEXT_PUBLIC_TEMPO_RPC_URL ||
-  'https://dreamy-northcutt:recursing-payne@rpc.testnet.tempo.xyz'
+  'https://rpc.moderato.tempo.xyz'
 
 const ALPHA_USD_ADDRESS = '0x20c0000000000000000000000000000000000001' as const
 

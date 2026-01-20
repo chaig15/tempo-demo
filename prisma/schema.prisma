@@ -46,6 +46,8 @@ model Transaction {
 }
 
 // Stripe Connected Accounts for off-ramp payouts
+// NOTE: Not used in demo - payouts are simulated
+// This shows what a full Connect integration would look like
 model ConnectedAccount {
   id                      String   @id @default(cuid())
   userAddress             String   @unique  // User's Tempo wallet address
@@ -60,19 +62,3 @@ model ConnectedAccount {
   @@index([userAddress])
 }
 
-// Token deployment info (for tracking deployed AcmeUSD)
-model TokenDeployment {
-  id              String   @id @default(cuid())
-  name            String
-  symbol          String
-  tokenAddress    String   @unique
-  deployerAddress String
-  deployTxHash    String
-
-  // Fee AMM liquidity info
-  feeAmmPoolAddress   String?
-  liquidityTxHash     String?
-  liquidityAmount     String?
-
-  createdAt       DateTime @default(now())
-}

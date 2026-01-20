@@ -1,51 +1,56 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/db'
+import { formatUnits } from 'viem'
 import { burnTokens, verifyTransferToTreasury } from '@/lib/tempo-server'
-import { createTransfer } from '@/lib/stripe-server'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { withdrawalId, transferTxHash } = body
+    const { userAddress, amountAcmeUsd, transferTxHash } = body
 
     // Validate input
-    if (!withdrawalId || typeof withdrawalId !== 'string') {
-      return NextResponse.json({ error: 'Invalid withdrawal ID' }, { status: 400 })
+    if (!userAddress || typeof userAddress !== 'string') {
+      return NextResponse.json({ error: 'Invalid user address' }, { status: 400 })
+    }
+
+    if (!amountAcmeUsd || typeof amountAcmeUsd !== 'string') {
+      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 })
     }
 
     if (!transferTxHash || typeof transferTxHash !== 'string') {
       return NextResponse.json({ error: 'Invalid transfer transaction hash' }, { status: 400 })
     }
 
-    // Find transaction
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: withdrawalId },
+    // Check for duplicate transaction (idempotency by txHash)
+    const existingTx = await prisma.transaction.findFirst({
+      where: { transferTxHash },
     })
 
-    if (!transaction) {
-      return NextResponse.json({ error: 'Withdrawal not found' }, { status: 404 })
+    if (existingTx) {
+      if (existingTx.status === 'completed' && existingTx.burnTxHash) {
+        return NextResponse.json({
+          success: true,
+          burnTxHash: existingTx.burnTxHash,
+          payoutStatus: existingTx.payoutStatus,
+          alreadyProcessed: true,
+        })
+      }
+      // If exists but not completed, let it continue processing
     }
 
-    if (transaction.type !== 'offramp') {
-      return NextResponse.json({ error: 'Invalid transaction type' }, { status: 400 })
-    }
+    const amountBigInt = BigInt(amountAcmeUsd)
+    const amountUsd = parseFloat(formatUnits(amountBigInt, 6))
 
-    // Check if already processed (idempotency)
-    if (transaction.status === 'completed' && transaction.burnTxHash) {
-      return NextResponse.json({
-        success: true,
-        burnTxHash: transaction.burnTxHash,
-        payoutStatus: transaction.payoutStatus,
-        alreadyProcessed: true,
-      })
-    }
-
-    // Update with transfer hash
-    await prisma.transaction.update({
-      where: { id: withdrawalId },
+    // Create transaction record now that user has signed
+    const transaction = existingTx || await prisma.transaction.create({
       data: {
+        type: 'offramp',
         status: 'processing',
+        userAddress: userAddress.toLowerCase(),
+        amountUsd,
+        amountToken: amountAcmeUsd,
         transferTxHash,
+        payoutStatus: 'pending',
       },
     })
 
@@ -58,7 +63,7 @@ export async function POST(request: NextRequest) {
 
     if (!verified) {
       await prisma.transaction.update({
-        where: { id: withdrawalId },
+        where: { id: transaction.id },
         data: {
           status: 'failed',
           errorMessage: 'Transfer verification failed',
@@ -71,63 +76,30 @@ export async function POST(request: NextRequest) {
     try {
       const { txHash: burnTxHash } = await burnTokens(
         expectedAmount,
-        `offramp:${withdrawalId}`
+        `offramp:${transaction.id}`
       )
 
-      // Get user's connected account for payout
-      const connectedAccount = await prisma.connectedAccount.findUnique({
-        where: { userAddress: transaction.userAddress },
-      })
-
-      const amountUsd = Number(transaction.amountUsd)
-      let transferId: string | null = null
-      let payoutStatus = 'queued'
-
-      if (connectedAccount?.payoutsEnabled) {
-        // Create Stripe transfer to user's connected account
-        try {
-          const transferResult = await createTransfer(
-            amountUsd,
-            connectedAccount.stripeAccountId,
-            {
-              userAddress: transaction.userAddress,
-              withdrawalId,
-              burnTxHash,
-            }
-          )
-          transferId = transferResult.transferId
-          payoutStatus = 'paid'
-        } catch (transferError) {
-          // Log but don't fail - the burn already happened
-          console.error('Stripe transfer creation failed:', transferError)
-          payoutStatus = 'failed'
-        }
-      } else {
-        // No connected account - payout pending
-        payoutStatus = 'pending_account'
-      }
+      // Mark payout as processing (simulated for demo)
+      const payoutStatus = 'processing'
 
       // Update transaction as completed
       await prisma.transaction.update({
-        where: { id: withdrawalId },
+        where: { id: transaction.id },
         data: {
           status: 'completed',
           burnTxHash,
           payoutStatus,
-          payoutId: transferId,
         },
       })
 
       return NextResponse.json({
         success: true,
         burnTxHash,
-        transferId,
         payoutStatus,
-        needsAccountSetup: !connectedAccount?.payoutsEnabled,
       })
     } catch (burnError) {
       await prisma.transaction.update({
-        where: { id: withdrawalId },
+        where: { id: transaction.id },
         data: {
           status: 'failed',
           errorMessage: burnError instanceof Error ? burnError.message : 'Burn failed',

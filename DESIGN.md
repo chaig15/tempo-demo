@@ -26,6 +26,8 @@ A stablecoin on/off-ramp for the Tempo network. Users pay USD to get AcmeUSD tok
 
 **On Neon vs SQLite**: Originally considered SQLite for simplicity, but Neon's serverless driver works natively with Vercel's edge runtime. Prisma 7's driver adapter pattern makes this clean.
 
+**On Off-ramp Payouts**: We considered Stripe Connect for paying users to their own bank accounts. However, Connect requires platform verification even in test mode. For this demo, payouts are **simulated** - the on-chain burn is real, but the USD payout is marked as "processing" without actually hitting Stripe. The database schema includes a `ConnectedAccount` model to show what a full Connect integration would look like.
+
 ### System Diagram
 
 ```
@@ -44,6 +46,7 @@ A stablecoin on/off-ramp for the Tempo network. Users pay USD to get AcmeUSD tok
 │  │                    API Routes                                │ │
 │  │  POST /api/onramp/initiate   - Create Stripe PaymentIntent  │ │
 │  │  POST /api/onramp/confirm    - Verify payment & mint tokens │ │
+│  │  POST /api/webhooks/stripe   - Backup mint via webhook      │ │
 │  │  POST /api/offramp/initiate  - Create withdrawal request    │ │
 │  │  POST /api/offramp/confirm   - Verify transfer & burn       │ │
 │  │  GET  /api/transactions      - Transaction history          │ │
@@ -80,7 +83,7 @@ User                    Frontend                 Backend                  Tempo
   │─── Enter amount ──────>│                        │                       │
   │                        │─── POST /initiate ────>│                       │
   │                        │                        │── Create PaymentIntent│
-  │                        │<── paymentIntentId ────│                       │
+  │                        │<── clientSecret ───────│                       │
   │                        │                        │                       │
   │─── Enter card ────────>│                        │                       │
   │    (Stripe Elements)   │                        │                       │
@@ -98,6 +101,11 @@ User                    Frontend                 Backend                  Tempo
 - Mint only after Stripe confirms payment (not on PaymentIntent creation)
 - PaymentIntent ID is the idempotency key—same ID can't trigger multiple mints
 - Server holds treasury key, client never sees it
+- Webhook backup: If redirect fails (e.g., Amazon Pay), webhook catches it
+
+**Webhook backup for redirect payments:**
+
+Payment methods like Amazon Pay use redirects. If the redirect page fails (404, network issue), the sync confirm flow won't fire. We have a webhook handler at `/api/webhooks/stripe` that listens for `payment_intent.succeeded` and mints tokens if not already done. Both paths are idempotent.
 
 ### Off-ramp: AcmeUSD → USD
 
@@ -117,14 +125,24 @@ User                    Frontend                 Backend                  Tempo
   │                        │    (txHash)            │── Verify transfer ───>│
   │                        │                        │<── confirmed ─────────│
   │                        │                        │── Burn tokens ───────>│
-  │                        │                        │── Create Stripe payout│
+  │                        │                        │── Mark payout ────────│
+  │                        │                        │   (simulated)         │
   │                        │<── success ────────────│                       │
 ```
 
 **Key decisions:**
 - User transfers to treasury first, then we burn
 - We verify the transfer on-chain before burning
-- Stripe payout created to show outflow in dashboard (test mode simulates, doesn't hit real bank)
+- Payout is **simulated** for demo (marked as "processing")
+- Real Connect integration would create a Stripe Transfer to user's connected account
+
+**Why simulated payouts:**
+
+Stripe Connect requires platform verification even in test mode. For this demo:
+- On-chain operations (transfer + burn) are **real**
+- USD payout is marked as "processing" without actual Stripe call
+- Shows the full UX flow without Connect setup
+- Database schema includes `ConnectedAccount` model for reference
 
 ## Token Design
 
@@ -138,6 +156,8 @@ User                    Frontend                 Backend                  Tempo
   decimals: 6         // Standard stablecoin precision
 }
 ```
+
+**Deployed address:** `0x20C000000000000000000000d629524e55e24d36`
 
 ### Roles
 
@@ -156,7 +176,7 @@ Users can pay Tempo network fees with AcmeUSD. This requires:
 1. AcmeUSD deployed as TIP-20 with `currency: "USD"`
 2. Liquidity in the Fee AMM (AcmeUSD/AlphaUSD pair)
 
-We'll seed initial liquidity using AlphaUSD from the testnet faucet.
+We seeded $100 initial liquidity using AlphaUSD from the testnet faucet.
 
 ## Fee Model
 
@@ -205,45 +225,72 @@ Every mint has a corresponding Stripe payment. Every burn has a corresponding pa
 - **Fraud/chargebacks**: Stripe test mode doesn't have these. In prod, you'd hold funds for dispute period.
 - **Rate limiting**: Would add for prod to prevent abuse.
 - **KYC**: Out of scope for demo.
+- **Real payouts**: Connect requires verification. Payouts are simulated.
 
 ## Database Schema
 
 ```prisma
 model Transaction {
-  id            String   @id @default(cuid())
-  type          String   // "onramp" | "offramp"
-  status        String   // "pending" | "completed" | "failed"
-  userAddress   String
-  amount        Decimal
-  paymentId     String?  // Stripe PaymentIntent ID or withdrawal ID
-  txHash        String?  // Tempo transaction hash
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  type                  String   // "onramp" | "offramp"
+  status                String   // "pending" | "processing" | "completed" | "failed"
+  userAddress           String
+  amountUsd             Float
+  amountToken           String   // With decimals, stored as string
+
+  // Stripe (on-ramp)
+  stripePaymentIntentId String?  @unique
+  stripePaymentStatus   String?
+
+  // Blockchain
+  mintTxHash            String?  // On-ramp mint
+  transferTxHash        String?  // Off-ramp user transfer
+  burnTxHash            String?  // Off-ramp burn
+
+  // Payout (off-ramp)
+  paymentMethodId       String?
+  payoutStatus          String?  // "processing" (simulated)
+  payoutId              String?
+
+  // Metadata
+  memo                  String?
+  errorMessage          String?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([userAddress])
-  @@index([paymentId])
+  @@index([stripePaymentIntentId])
+  @@index([status])
 }
 
-model TokenDeployment {
-  id            String   @id @default(cuid())
-  tokenAddress  String   @unique
-  name          String
-  symbol        String
-  deployTxHash  String
-  createdAt     DateTime @default(now())
+// NOTE: Not used in demo - shows what Connect integration would look like
+model ConnectedAccount {
+  id                 String   @id @default(cuid())
+  userAddress        String   @unique
+  stripeAccountId    String   @unique  // acct_xxx
+  onboardingComplete Boolean  @default(false)
+  chargesEnabled     Boolean  @default(false)
+  payoutsEnabled     Boolean  @default(false)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userAddress])
 }
 ```
 
-## Testnet Tokens
+## Testnet Configuration
 
-| Token | Address |
-|-------|---------|
-| pathUSD | `0x20c0000000000000000000000000000000000000` |
+| Item | Value |
+|------|-------|
+| Network | Tempo Moderato (testnet) |
+| Chain ID | 42431 |
+| RPC | https://rpc.moderato.tempo.xyz |
+| Explorer | https://explore.tempo.xyz |
+| AcmeUSD | `0x20C000000000000000000000d629524e55e24d36` |
+| Treasury | `0xbf76f389F1CdE4a8d0041CEd69b0409671F79dCa` |
 | AlphaUSD | `0x20c0000000000000000000000000000000000001` |
-| BetaUSD | `0x20c0000000000000000000000000000000000002` |
-| ThetaUSD | `0x20c0000000000000000000000000000000000003` |
-
-AcmeUSD gets a new address when we deploy it. We pair it with AlphaUSD for fee payment.
 
 ## Demo Considerations
 
@@ -257,7 +304,7 @@ Intentionally no reset feature:
 ### Testnet Banner
 
 UI shows:
-- "Testnet Demo" indicator
+- "TESTNET" indicator
 - Test card hint: `4242 4242 4242 4242`
 - Link to Tempo Explorer for verification
 
@@ -265,6 +312,16 @@ UI shows:
 
 For demo: environment variable is fine.
 For prod: HSM or MPC custody.
+
+### Simulated Payouts
+
+Off-ramp burns tokens (real on-chain) but marks payout as "processing" without calling Stripe. This shows the full UX without requiring Stripe Connect platform verification.
+
+To enable real payouts:
+1. Sign up for Stripe Connect
+2. Re-enable `/api/connect/*` routes
+3. Update OffRamp component to include bank linking flow
+4. Update offramp confirm to create Stripe Transfer
 
 ## API Reference
 
@@ -277,7 +334,7 @@ For prod: HSM or MPC custody.
 {
   clientSecret: "pi_xxx_secret_xxx",  // For Stripe Elements
   paymentIntentId: "pi_xxx",
-  amountAcmeUsd: "100000000"  // 100 * 10^6
+  amountToken: "100000000"  // 100 * 10^6
 }
 ```
 
@@ -290,6 +347,9 @@ For prod: HSM or MPC custody.
 { success: true, txHash: "0x...", amountMinted: "100000000" }
 ```
 
+### POST /api/webhooks/stripe
+Stripe webhook handler. Listens for `payment_intent.succeeded` and mints if not already processed. Idempotent with confirm endpoint.
+
 ### POST /api/offramp/initiate
 ```typescript
 // Request
@@ -297,7 +357,7 @@ For prod: HSM or MPC custody.
 
 // Response
 {
-  withdrawalId: "wd_xxx",
+  withdrawalId: "cuid_xxx",
   treasuryAddress: "0x...",
   amountUsd: 100
 }
@@ -306,10 +366,10 @@ For prod: HSM or MPC custody.
 ### POST /api/offramp/confirm
 ```typescript
 // Request
-{ withdrawalId: "wd_xxx", transferTxHash: "0x..." }
+{ withdrawalId: "cuid_xxx", transferTxHash: "0x..." }
 
 // Response
-{ success: true, burnTxHash: "0x...", payoutStatus: "queued" }
+{ success: true, burnTxHash: "0x...", payoutStatus: "processing" }
 ```
 
 ## Tempo SDK Quick Reference
@@ -334,11 +394,23 @@ Hooks.faucet.useFundSync()       // Get testnet AlphaUSD
 webAuthn({ keyManager: KeyManager.localStorage() })
 ```
 
+## Completed
+
+- [x] Next.js 16 project with App Router
+- [x] Wagmi + Viem configured for Tempo Moderato
+- [x] Prisma 7 with Neon serverless adapter
+- [x] Passkey wallet connection (WebAuthn)
+- [x] Stripe integration (test mode)
+- [x] On-ramp flow with webhook backup
+- [x] Off-ramp flow with simulated payouts
+- [x] Transaction history
+- [x] Dark theme UI
+- [x] AcmeUSD token deployed
+- [x] Fee AMM liquidity seeded ($100)
+- [x] Treasury funded with AlphaUSD
+
 ## What's Left
 
-- [ ] Get Stripe test API keys, add to `.env`
-- [ ] Deploy AcmeUSD token to testnet
-- [ ] Grant ISSUER_ROLE to treasury
-- [ ] Seed Fee AMM liquidity
-- [ ] End-to-end test
 - [ ] Deploy to Vercel
+- [ ] End-to-end testing with multiple users
+- [ ] (Optional) Enable Stripe Connect for real payouts

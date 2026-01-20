@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useConnection } from 'wagmi'
-import { formatUnits } from 'viem'
 
 interface Transaction {
   id: string
@@ -54,14 +53,14 @@ export function TransactionHistory() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      pending: 'bg-yellow-100 text-yellow-800',
-      processing: 'bg-blue-100 text-blue-800',
-      completed: 'bg-green-100 text-green-800',
-      failed: 'bg-red-100 text-red-800',
+      pending: 'bg-yellow-500/20 text-yellow-400',
+      processing: 'bg-blue-500/20 text-blue-400',
+      completed: 'bg-green-500/20 text-green-400',
+      failed: 'bg-red-500/20 text-red-400',
     }
 
     return (
-      <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-800'}`}>
+      <span className={`px-2 py-0.5 rounded text-xs font-medium ${styles[status] || 'bg-gray-500/20 text-gray-400'}`}>
         {status}
       </span>
     )
@@ -73,9 +72,9 @@ export function TransactionHistory() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-      <div className="p-4 border-b border-gray-100">
-        <h2 className="text-lg font-semibold">Transaction History</h2>
+    <div className="bg-[#1a1a1a] rounded-xl border border-[#2a2a2a]">
+      <div className="p-4 border-b border-[#2a2a2a]">
+        <h2 className="text-lg font-semibold text-white">Transaction History</h2>
       </div>
 
       {isLoading ? (
@@ -83,7 +82,7 @@ export function TransactionHistory() {
           Loading transactions...
         </div>
       ) : error ? (
-        <div className="p-4 text-center text-red-500">
+        <div className="p-4 text-center text-red-400">
           {error}
         </div>
       ) : transactions.length === 0 ? (
@@ -91,25 +90,25 @@ export function TransactionHistory() {
           No transactions yet
         </div>
       ) : (
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-[#2a2a2a]">
           {transactions.map((tx) => (
             <div key={tx.id} className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  tx.type === 'onramp' ? 'bg-green-100' : 'bg-blue-100'
+                  tx.type === 'onramp' ? 'bg-green-500/20' : 'bg-blue-500/20'
                 }`}>
                   {tx.type === 'onramp' ? (
-                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                   ) : (
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                     </svg>
                   )}
                 </div>
                 <div>
-                  <div className="font-medium">
+                  <div className="font-medium text-white">
                     {tx.type === 'onramp' ? 'Bought' : 'Sold'} AcmeUSD
                   </div>
                   <div className="text-sm text-gray-500">
@@ -124,7 +123,7 @@ export function TransactionHistory() {
               </div>
 
               <div className="text-right">
-                <div className="font-medium">
+                <div className={`font-medium ${tx.type === 'onramp' ? 'text-green-400' : 'text-white'}`}>
                   {tx.type === 'onramp' ? '+' : '-'}${tx.amountUsd.toFixed(2)}
                 </div>
                 <div className="flex items-center gap-2 justify-end">
@@ -134,7 +133,7 @@ export function TransactionHistory() {
                       href={`https://explore.tempo.xyz/tx/${getTxHash(tx)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-500 hover:text-blue-600"
+                      className="text-blue-400 hover:text-blue-300"
                       title="View on Explorer"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
