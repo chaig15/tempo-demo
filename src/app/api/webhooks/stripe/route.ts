@@ -47,14 +47,30 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true, status: 'already_processed' })
       }
 
-      // Update to processing
-      await prisma.transaction.update({
-        where: { id: transaction.id },
+      // Already being processed by another request
+      if (transaction.status === 'processing') {
+        console.log(`[Webhook] Already processing: ${transaction.id}`)
+        return NextResponse.json({ received: true, status: 'already_processing' })
+      }
+
+      // Atomic claim: only proceed if we successfully update from pending -> processing
+      // This prevents race conditions between webhook and confirm endpoints
+      const claimed = await prisma.transaction.updateMany({
+        where: {
+          id: transaction.id,
+          status: 'pending', // Only claim if still pending
+        },
         data: {
           status: 'processing',
           stripePaymentStatus: 'succeeded',
         },
       })
+
+      // If no rows updated, another process already claimed it
+      if (claimed.count === 0) {
+        console.log(`[Webhook] Could not claim transaction: ${transaction.id} - already being processed`)
+        return NextResponse.json({ received: true, status: 'already_claimed' })
+      }
 
       // Mint tokens
       const amountUsd = paymentIntent.amount / 100
