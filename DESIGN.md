@@ -99,7 +99,7 @@ User                    Frontend                 Backend                  Tempo
 
 **Key decisions:**
 - Mint only after Stripe confirms payment (not on PaymentIntent creation)
-- PaymentIntent ID is the idempotency key—same ID can't trigger multiple mints
+- **Atomic claim for idempotency**: Both confirm and webhook use `updateMany WHERE status='pending'` to claim the transaction. Only one can succeed (returns `count: 1`), the other backs off. This prevents double-mints from race conditions.
 - Server holds treasury key, client never sees it
 - Webhook backup: If redirect fails (e.g., Amazon Pay), webhook catches it
 
@@ -217,7 +217,7 @@ Every mint has a corresponding Stripe payment. Every burn has a corresponding pa
 
 | Attack | Mitigation |
 |--------|------------|
-| Double-mint | Idempotency on Stripe PaymentIntent ID |
+| Double-mint | Atomic claim: `updateMany WHERE status='pending'` ensures only one process mints |
 | Fake payment | Server verifies with Stripe API |
 | Front-running | Mint happens server-side, not user-initiated |
 | Treasury drain | Only ISSUER_ROLE can mint/burn |
