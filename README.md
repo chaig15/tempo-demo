@@ -3,7 +3,7 @@
 A stablecoin on-ramp and off-ramp for the Tempo network. Users can purchase AcmeUSD tokens with USD (via Stripe) and convert them back to USD.
 
 ## Prerequisites
-p
+
 - Node.js 18+
 - pnpm
 

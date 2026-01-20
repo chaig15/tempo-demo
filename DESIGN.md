@@ -419,6 +419,6 @@ webAuthn({ keyManager: KeyManager.localStorage() })
 
 ## What's Left
 
-- [ ] Deploy to Vercel
-- [ ] End-to-end testing with multiple users
+- [x] Deploy to Vercel
+- [x] End-to-end testing with multiple users
 - [ ] (Optional) Enable Stripe Connect for real payouts
