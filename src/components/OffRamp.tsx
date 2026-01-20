@@ -20,14 +20,17 @@ export function OffRamp() {
 
   const transfer = Hooks.token.useTransferSync()
 
-  const maxAmount = balance ? parseFloat(formatUnits(balance, 6)) : 0
+  // Fee buffer for transaction fees (~$0.01 to be safe, actual fee is ~$0.001)
+  const FEE_BUFFER = 0.01
+  const fullBalance = balance ? parseFloat(formatUnits(balance, 6)) : 0
+  const maxWithdrawable = Math.max(0, fullBalance - FEE_BUFFER)
 
   const handleInitiate = () => {
     if (!address || !amount || !ACME_USD_ADDRESS) return
 
     const amountNum = parseFloat(amount)
-    if (amountNum <= 0 || amountNum > maxAmount) {
-      setError(`Amount must be between $0.01 and $${maxAmount.toFixed(2)}`)
+    if (amountNum <= 0 || amountNum > maxWithdrawable) {
+      setError(`Amount must be between $0.01 and $${maxWithdrawable.toFixed(2)} (fees reserved)`)
       return
     }
 
@@ -45,8 +48,8 @@ export function OffRamp() {
 
     // Re-check balance before transfer
     const amountNum = parseFloat(amount)
-    if (amountNum > maxAmount) {
-      setError(`Insufficient balance. You have $${maxAmount.toFixed(2)} AcmeUSD.`)
+    if (amountNum > maxWithdrawable) {
+      setError(`Insufficient balance. You can withdraw up to $${maxWithdrawable.toFixed(2)} (fees reserved).`)
       return
     }
 
@@ -171,10 +174,11 @@ export function OffRamp() {
                 Amount (AcmeUSD)
               </label>
               <button
-                onClick={() => setAmount(maxAmount.toString())}
+                onClick={() => setAmount(maxWithdrawable.toFixed(2))}
                 className="text-sm text-blue-400 hover:text-blue-300"
+                title="Small amount reserved for network fee"
               >
-                Max: ${maxAmount.toFixed(2)}
+                Max: ${fullBalance.toFixed(2)}
               </button>
             </div>
             <div className="relative">
@@ -185,11 +189,12 @@ export function OffRamp() {
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
                 min="0.01"
-                max={maxAmount}
+                max={maxWithdrawable}
                 step="0.01"
                 className="w-full pl-8 pr-4 py-3 bg-[#0f0f0f] border border-[#3a3a3a] rounded-lg text-white placeholder-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+            <p className="text-xs text-gray-500 mt-1">~$0.01 reserved for network fee</p>
           </div>
 
           <div className="p-4 bg-[#0f0f0f] rounded-lg border border-[#2a2a2a]">
@@ -204,7 +209,7 @@ export function OffRamp() {
 
           <button
             onClick={handleInitiate}
-            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > maxAmount}
+            disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > maxWithdrawable}
             className="w-full px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
             Continue
