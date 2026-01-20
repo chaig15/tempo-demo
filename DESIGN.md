@@ -114,15 +114,17 @@ User                    Frontend                 Backend                  Tempo
   │                        │                        │                       │
   │─── Enter amount ──────>│                        │                       │
   │                        │─── POST /initiate ────>│                       │
-  │                        │<── withdrawalId + ─────│                       │
-  │                        │    treasuryAddress     │                       │
+  │                        │<── treasuryAddress ────│  (validation only)    │
+  │                        │                        │                       │
+  │─── Confirm ───────────>│  (local confirmation)  │                       │
   │                        │                        │                       │
   │─── Sign transfer ─────>│                        │                       │
   │    (passkey)           │───────────────────────────── Transfer ────────>│
   │                        │<──────────────────────────── txHash ──────────│
   │                        │                        │                       │
   │                        │─── POST /confirm ─────>│                       │
-  │                        │    (txHash)            │── Verify transfer ───>│
+  │                        │    (addr, amount, tx)  │── Create DB record ───│
+  │                        │                        │── Verify transfer ───>│
   │                        │                        │<── confirmed ─────────│
   │                        │                        │── Burn tokens ───────>│
   │                        │                        │── Mark payout ────────│
@@ -133,6 +135,7 @@ User                    Frontend                 Backend                  Tempo
 **Key decisions:**
 - User transfers to treasury first, then we burn
 - We verify the transfer on-chain before burning
+- **Late DB record**: Transaction only created after user signs (not on "Continue")—avoids orphaned records from abandoned flows
 - Payout is **simulated** for demo (marked as "processing")
 - Real Connect integration would create a Stripe Transfer to user's connected account
 
@@ -218,7 +221,8 @@ Every mint has a corresponding Stripe payment. Every burn has a corresponding pa
 | Fake payment | Server verifies with Stripe API |
 | Front-running | Mint happens server-side, not user-initiated |
 | Treasury drain | Only ISSUER_ROLE can mint/burn |
-| Replay transfer | Withdrawal ID + txHash uniqueness |
+| Replay transfer | Idempotency on transferTxHash |
+| Over-withdraw | Client-side balance check + server verifies on-chain transfer amount |
 
 ### What We're Not Handling
 
@@ -355,18 +359,22 @@ Stripe webhook handler. Listens for `payment_intent.succeeded` and mints if not 
 // Request
 { userAddress: "0x...", amountAcmeUsd: "100000000" }
 
-// Response
+// Response (validation only, no DB record created)
 {
-  withdrawalId: "cuid_xxx",
   treasuryAddress: "0x...",
+  amountAcmeUsd: "100000000",
   amountUsd: 100
 }
 ```
 
 ### POST /api/offramp/confirm
 ```typescript
-// Request
-{ withdrawalId: "cuid_xxx", transferTxHash: "0x..." }
+// Request (creates DB record and processes burn)
+{
+  userAddress: "0x...",
+  amountAcmeUsd: "100000000",
+  transferTxHash: "0x..."
+}
 
 // Response
 { success: true, burnTxHash: "0x...", payoutStatus: "processing" }
