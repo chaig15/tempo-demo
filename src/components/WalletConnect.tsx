@@ -61,12 +61,18 @@ export function WalletConnect() {
   if (address) {
     return (
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg">
+        <a
+          href={`https://explore.tempo.xyz/address/${address}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-3 py-2 bg-green-500/10 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-colors"
+          title={address}
+        >
           <div className="w-2 h-2 bg-green-500 rounded-full" />
           <span className="text-sm font-mono text-green-400">
             {address.slice(0, 6)}...{address.slice(-4)}
           </span>
-        </div>
+        </a>
         <button
           onClick={() => disconnect()}
           className="px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-[#2a2a2a] rounded-lg transition-colors"
