@@ -1,77 +1,39 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { Handler } from 'tempo.ts/server'
 import prisma from '@/lib/db'
 
-// GET /api/keys/:key - Retrieve a key
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params
-  const key = path.join('/')
-
-  try {
-    const record = await prisma.keyStore.findUnique({
-      where: { key },
-    })
-
-    if (!record) {
-      return NextResponse.json({ error: 'Not found' }, { status: 404 })
-    }
-
-    return NextResponse.json({ value: record.value })
-  } catch (error) {
-    console.error('[KeyStore] GET error:', error)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
-  }
-}
-
-// PUT /api/keys/:key - Store a key
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params
-  const key = path.join('/')
-
-  try {
-    const body = await request.json()
-    const { value } = body
-
-    if (typeof value !== 'string') {
-      return NextResponse.json({ error: 'Invalid value' }, { status: 400 })
-    }
-
+// Prisma-based Kv adapter for cross-device passkey storage
+const prismaKv = {
+  get: async (key: string) => {
+    const record = await prisma.keyStore.findUnique({ where: { key } })
+    return record?.value
+  },
+  set: async (key: string, value: string) => {
     await prisma.keyStore.upsert({
       where: { key },
       update: { value },
       create: { key, value },
     })
-
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('[KeyStore] PUT error:', error)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
-  }
+  },
+  delete: async (key: string) => {
+    await prisma.keyStore.delete({ where: { key } }).catch(() => {})
+  },
 }
 
-// DELETE /api/keys/:key - Delete a key
-export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> }
-) {
-  const { path } = await params
-  const key = path.join('/')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const handler = Handler.keyManager({
+  kv: prismaKv as any,
+  path: '/api/keys',
+})
 
-  try {
-    await prisma.keyStore.delete({
-      where: { key },
-    }).catch(() => {
-      // Ignore if not found
-    })
+export async function GET(request: NextRequest) {
+  return handler.fetch(new Request(request.url, { method: 'GET', headers: request.headers }))
+}
 
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('[KeyStore] DELETE error:', error)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
-  }
+export async function PUT(request: NextRequest) {
+  return handler.fetch(new Request(request.url, { method: 'PUT', headers: request.headers, body: request.body, duplex: 'half' } as RequestInit))
+}
+
+export async function DELETE(request: NextRequest) {
+  return handler.fetch(new Request(request.url, { method: 'DELETE', headers: request.headers }))
 }
