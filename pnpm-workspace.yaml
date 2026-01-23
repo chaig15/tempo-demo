@@ -5,3 +5,5 @@ ignoredBuiltDependencies:
   - prisma
   - sharp
   - unrs-resolver
+patchedDependencies:
+  '@wagmi/core': patches/@wagmi__core.patch

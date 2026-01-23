@@ -1,0 +1,65 @@
+diff --git a/src/tempo/KeyManager.ts b/src/tempo/KeyManager.ts
+index 4fad5760805bf904af766e0b20c1445210e981f3..3edcd73370afceadcf74218170f2ca2a04e8f527 100644
+--- a/src/tempo/KeyManager.ts
++++ b/src/tempo/KeyManager.ts
+@@ -7,6 +7,47 @@ import {
+   type Storage,
+ } from '../createStorage.js'
+ 
++/**
++ * Serializes a WebAuthn credential for browsers that don't support toJSON().
++ * Safari < 18.4 lacks PublicKeyCredential.toJSON(), causing JSON.stringify to return {}.
++ * This helper manually serializes the credential response fields.
++ */
++function serializeCredential(credential: WebAuthnP256.P256Credential['raw']): unknown {
++  if (!credential) return credential
++
++  // If toJSON exists (Safari 18.4+, Chrome, Firefox), use native serialization
++  if (typeof (credential as any).toJSON === 'function') {
++    return (credential as any).toJSON()
++  }
++
++  // Manual serialization for older browsers (Safari < 18.4)
++  const base64url = (buffer: ArrayBuffer): string => {
++    const bytes = new Uint8Array(buffer)
++    let str = ''
++    for (const byte of bytes) str += String.fromCharCode(byte)
++    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
++  }
++
++  return {
++    id: credential.id,
++    type: credential.type,
++    authenticatorAttachment: (credential as any).authenticatorAttachment,
++    clientExtensionResults: (credential as any).getClientExtensionResults?.() ?? {},
++    response: {
++      clientDataJSON: base64url(credential.response.clientDataJSON),
++      attestationObject: base64url((credential.response as any).attestationObject),
++      authenticatorData: (credential.response as any).getAuthenticatorData
++        ? base64url((credential.response as any).getAuthenticatorData())
++        : undefined,
++      publicKey: (credential.response as any).getPublicKey
++        ? base64url((credential.response as any).getPublicKey())
++        : undefined,
++      publicKeyAlgorithm: (credential.response as any).getPublicKeyAlgorithm?.(),
++      transports: (credential.response as any).getTransports?.(),
++    },
++  }
++}
++
+ export type KeyManager = {
+   /** Function to fetch create options for WebAuthn. */
+   getChallenge?:
+@@ -158,7 +199,11 @@ export function http(
+           headers: {
+             'Content-Type': 'application/json',
+           },
+-          body: Json.stringify(parameters),
++          // Use serializeCredential for Safari < 18.4 compatibility
++          body: Json.stringify({
++            credential: serializeCredential(parameters.credential),
++            publicKey: parameters.publicKey,
++          }),
+         },
+       )
+ 

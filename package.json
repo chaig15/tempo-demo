@@ -2,6 +2,11 @@
   "name": "temp-next",
   "version": "0.1.0",
   "private": true,
+  "pnpm": {
+    "patchedDependencies": {
+      "@wagmi/core": "patches/@wagmi__core.patch"
+    }
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
