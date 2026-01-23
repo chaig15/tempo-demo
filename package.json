@@ -4,7 +4,7 @@
   "private": true,
   "pnpm": {
     "patchedDependencies": {
-      "@wagmi/core": "patches/@wagmi__core.patch"
+      "@wagmi/core@3.2.2": "patches/@wagmi__core.patch"
     }
   },
   "scripts": {
