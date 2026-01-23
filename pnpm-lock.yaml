@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  '@wagmi/core':
+  '@wagmi/core@3.2.2':
     hash: 2fcbd90d10062dd8ef279df37710fa1a194fc9ef344492b50cd7d9eb32421e28
     path: patches/@wagmi__core.patch
 
